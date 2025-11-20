@@ -16,12 +16,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Create an MCP server
-mcp = FastMCP(name = "dev-mcp-server")
+mcp = FastMCP(name = "mcp-server")
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request):
     """Health check endpoint"""
-    return JSONResponse({"status": "healthy", "service": "dev-mcp-server"})
+    return JSONResponse({"status": "healthy", "service": "mcp-server"})
+
+@mcp.custom_route("/healthy", methods=["GET"])
+async def healthy_check(request):
+    """Health check endpoint"""
+    return JSONResponse({"status": "healthy", "service": "mcp-server"})
 
 @mcp.custom_route("/sse", methods=["POST"])
 async def sse_post_handler(request):
@@ -30,11 +35,6 @@ async def sse_post_handler(request):
         {"error": "SSE endpoint requires GET method, not POST"},
         status_code=405
     )
-
-@mcp.tool()
-def add(a: int, b: int) -> int:
-    """Add two numbers"""
-    return a + b
 
 @mcp.tool()
 def get_booking_time_slots(
@@ -258,13 +258,16 @@ def schedule_meeting(
         location_type: (Optional) Specifies how the meeting will be conducted.
                       Valid values:
                       - "virtual": Online meeting (e.g., Zoom, Teams, Google Meet)
+                      - "virtual_static": Static video conferencing links
                       - "physical": In-person meeting at a physical address
                       - "phone": Phone call meeting
         
-        location_value: (Optional) The location details based on location_type:
-                       - For "virtual": Meeting URL or join link (e.g., "https://zoom.us/j/123456")
-                       - For "physical": Street address (e.g., "123 Main St, New York, NY 10001")
-                       - For "phone": Phone number to call (e.g., "+1-555-123-4567")
+        location_value: (Optional) 
+                - For virtual meetings, specify one of the following: 
+                    - google_meet, microsoft_teams, gotomeeting, webex, or zoom. 
+                - For static video conferencing links, use null. 
+                - For phone calls, use the guest's phone number in E164 format. 
+                - For in-person meetings, use the location's address ID (e.g., ADD-1234).
         
         string_custom_fields: (Optional) Additional custom text information required by your 
                              booking form. Format depends on your OnceHub calendar configuration.

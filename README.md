@@ -2,6 +2,10 @@
 
 A Model Context Protocol (MCP) server for OnceHub booking integration. This server provides tools to fetch available time slots and schedule meetings through the OnceHub API.
 
+## Architecture
+![Architecture](./images/mcp-work-flow.png)
+
+
 ## Project Structure
 
 ```
@@ -14,14 +18,10 @@ mcp-server/
 └── README.md            # This file
 ```
 
+
 ## Tools
 
-### 1. `add`
-Simple addition tool for testing.
-- **Parameters**: `a: int`, `b: int`
-- **Returns**: Sum of two numbers
-
-### 2. `get_booking_time_slots`
+### 1. `get_booking_time_slots`
 Retrieves available time slots from a booking calendar.
 
 **Parameters:**
@@ -33,7 +33,7 @@ Retrieves available time slots from a booking calendar.
 
 **Returns:** Dictionary containing booking slots information with success status, time slots data, and metadata.
 
-### 3. `schedule_meeting`
+### 2. `schedule_meeting`
 Schedules a meeting in a specified time slot.
 
 **Parameters:**
@@ -94,7 +94,7 @@ uv run main.py
 
 **Option 2: Using the script entry point**
 ```powershell
-uv run dev-mcp-server
+uv run mcp-server
 ```
 
 The server will start on `http://0.0.0.0:8000`
@@ -115,19 +115,19 @@ curl http://localhost:8000/sse
 
 ### Build the Docker image
 ```powershell
-docker build -t dev-mcp-server .
+docker build -t mcp-server .
 ```
 
 ### Run the container
 ```powershell
-docker run -p 8000:8000 dev-mcp-server
+docker run -p 8000:8000 mcp-server
 ```
 
 ### With environment variables
 ```powershell
 docker run -p 8000:8000 `
   -e ONCEHUB_API_URL="https://heisenbergapi.staticso2.com" `
-  dev-mcp-server
+  mcp-server
 ```
 
 ## Models
