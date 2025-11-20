@@ -5,7 +5,7 @@ import httpx
 import json
 import logging
 from typing import Optional, Dict, Any
-from models import BookingForm, Location
+from models import Location
 from fastapi.responses import JSONResponse
 
 # Configure logging
@@ -147,16 +147,6 @@ def get_booking_time_slots(
                 
                 # Add metadata
                 if isinstance(time_slots, list) and time_slots:
-                    location_type_counts = {}
-                    earliest_slot = None
-                    latest_slot = None
-                    
-                    for slot in time_slots:
-                        locations = slot.get("locations", [])
-                        for location in locations:
-                            loc_type = location.get("type", "unknown")
-                            location_type_counts[loc_type] = location_type_counts.get(loc_type, 0) + 1
-                    
                     result["metadata"] = {
                         "time_slots": time_slots
                         }
@@ -217,10 +207,9 @@ def schedule_meeting(
     guest_phone: Optional[str] = None,
     location_type: Optional[str] = None,
     location_value: Optional[str] = None,
-    string_custom_fields: Optional[str] = None,
-    array_custom_fields: Optional[list] = None,
-    timeout: int = 30
-) -> Dict[str, Any]:
+    timeout: int = 30,
+    custom_fields: object = None  # Accept any additional fields as custom fields
+) -> dict:
     """
     Book a meeting in a specific time slot on an OnceHub calendar.
     
@@ -256,28 +245,30 @@ def schedule_meeting(
                     Example: "+1-555-123-4567" or "555-123-4567"
         
         location_type: (Optional) Specifies how the meeting will be conducted.
-                      Valid values:
-                      - "virtual": Online meeting (e.g., Zoom, Teams, Google Meet)
-                      - "virtual_static": Static video conferencing links
-                      - "physical": In-person meeting at a physical address
-                      - "phone": Phone call meeting
+            Valid values:
+            - "virtual": Online meeting (e.g., Zoom, Teams, Google Meet)
+            - "virtual_static": Static video conferencing links
+            - "physical": In-person meeting at a physical address
+            - "phone": Phone call meeting
         
         location_value: (Optional) 
-                - For virtual meetings, specify one of the following: 
-                    - google_meet, microsoft_teams, gotomeeting, webex, or zoom. 
-                - For static video conferencing links, use null. 
-                - For phone calls, use the guest's phone number in E164 format. 
-                - For in-person meetings, use the location's address ID (e.g., ADD-1234).
+            - For virtual meetings, specify one of the following: 
+                - google_meet, microsoft_teams, gotomeeting, webex, or zoom. 
+            - For static video conferencing links, use null. 
+            - For phone calls, use the guest's phone number in E164 format. 
+            - For in-person meetings, use the location's address ID (e.g., ADD-1234).
         
-        string_custom_fields: (Optional) Additional custom text information required by your 
-                             booking form. Format depends on your OnceHub calendar configuration.
-        
-        array_custom_fields: (Optional) Additional custom multi-value information as a list.
-                            Format: ["value1", "value2", "value3"]
-                            Structure depends on your OnceHub calendar configuration.
-        
-        timeout: Maximum seconds to wait for the API response before timing out.
-                Default is 30 seconds. Increase if dealing with slow network connections.
+        custom_fields: (Optional) Additional custom fields as key-value pairs to be added to booking form.
+            Supports both string values and list values:
+            - String fields: {"city_name": "haryana", "company": "Acme Corp"}
+            - List fields: {"interests": ["Demo", "Pricing"], "skills": ["Python", "JavaScript"]}
+            
+            Example: {
+                "city_name": "haryana",
+                "company": "Acme Corp",
+                "interests": ["Product Demo", "Pricing"],
+                "department": "Engineering"
+            }
     
     Returns:
         A dictionary containing:
@@ -318,21 +309,23 @@ def schedule_meeting(
             "Accept": "application/json",
             "API-key": api_key
         }
-        
-        # Create BookingForm
-        booking_form = BookingForm(
-            name=guest_name,
-            email=guest_email,
-            phone=guest_phone or "",
-            string_custom_fields=string_custom_fields or "",
-            array_custom_fields=array_custom_fields or []
-        )
+
+        booking_form_data = {
+            "name": guest_name,
+            "email": guest_email,
+            "phone": guest_phone
+        }
+
+        # Add all custom fields directly to booking_form as key-value pairs
+        if custom_fields and isinstance(custom_fields, dict):  # Added isinstance check
+            logger.info(f"Adding custom fields: {json.dumps(custom_fields, indent=2)}")
+            booking_form_data.update(custom_fields)
         
         # Prepare the booking payload
         booking_data = {
             "start_time": start_time,
             "guest_time_zone": guest_time_zone,
-            "booking_form": booking_form.to_dict()
+            "booking_form": booking_form_data
         }
         
         # Add location details if provided
