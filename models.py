@@ -19,7 +19,7 @@ class BookingForm(BaseModel):
     """Model representing a booking form with guest information."""
     name: str = Field(..., description="Guest's full name")
     email: str = Field(..., description="Guest's email address")
-    phone: str = Field(..., description="Guest's phone number")
+    phone: Optional[str] = Field(default=None, description="Guest's phone number")
     string_custom_fields: str = Field(default="", description="Custom string fields")
     array_custom_fields: List[str] = Field(default_factory=list, description="Custom array fields")
     

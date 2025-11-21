@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-dev-mcp-server = "main:main"
+mcp-server = "main:main"
 
 [tool.setuptools]
 py-modules = ["main", "models"]
