@@ -177,7 +177,7 @@ def get_booking_time_slots(
         return {
             "success": False,
             "error": str(e),
-            "user_friendly_error": "API key not configured. Please set ONCEHUB_API_KEY environment variable.",
+            "user_friendly_error": "API key not configured.",
             "status_code": None,
             "calendar_id": calendar_id
         }
@@ -408,7 +408,7 @@ def schedule_meeting(
         return {
             "success": False,
             "error": str(e),
-            "user_friendly_error": "API key not configured. Please set ONCEHUB_API_KEY environment variable.",
+            "user_friendly_error": "API key not configured.",
             "status_code": None,
             "calendar_id": calendar_id
         }
