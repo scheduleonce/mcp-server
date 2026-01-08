@@ -1,5 +1,4 @@
 import os
-from fastmcp import FastMCP
 import asyncio
 import httpx
 import json
@@ -7,6 +6,8 @@ import logging
 from typing import Optional, Dict, Any
 from models import Location
 from fastapi.responses import JSONResponse
+from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_http_headers
 
 # Configure logging
 logging.basicConfig(
@@ -36,10 +37,20 @@ async def sse_post_handler(request):
         status_code=405
     )
 
+def get_api_key_from_context() -> str:
+    """Extract API key from FastMCP context"""
+    try:
+        headers = get_http_headers()
+        auth_header = headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            return auth_header.replace("Bearer ", "").strip()
+        raise ValueError("Missing or invalid Authorization header")
+    except Exception as e:
+        raise ValueError(f"Failed to get API key from context: {str(e)}")
+
 @mcp.tool()
 def get_booking_time_slots(
     calendar_id: str,
-    api_key: str,
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
     timeout: int = 30
@@ -53,19 +64,16 @@ def get_booking_time_slots(
     Args:
         calendar_id: The unique identifier of the OnceHub booking calendar. 
                     This ID identifies which calendar's time slots to fetch.
-                    Example: "abc123-calendar-id"
-        
-        api_key: Your OnceHub API authentication key. Required for every request.
-                This should be kept secure and not shared publicly.
+                    Example: "BKC-123"
         
         start_time: (Optional) Only return time slots starting from this date/time onwards.
-                   Format: ISO 8601 datetime string (YYYY-MM-DDTHH:MM:SS)
-                   Example: "2024-01-15T09:00:00" for January 15, 2024 at 9:00 AM
+                   Format: ISO 8601 datetime string (YYYY-MM-DDTHH:MM:SSZ)
+                   Example: "2024-01-15T09:00:00Z" for January 15, 2024 at 9:00 AM UTC
                    If omitted, returns slots from the current date onwards.
         
         end_time: (Optional) Only return time slots up until this date/time.
-                 Format: ISO 8601 datetime string (YYYY-MM-DDTHH:MM:SS)
-                 Example: "2024-01-30T17:00:00" for January 30, 2024 at 5:00 PM
+                 Format: ISO 8601 datetime string (YYYY-MM-DDTHH:MM:SSZ)
+                 Example: "2024-01-30T17:00:00Z" for January 30, 2024 at 5:00 PM UTC
                  If omitted, returns slots up to the calendar's configured availability limit.
         
         timeout: Maximum seconds to wait for the API response before timing out.
@@ -82,16 +90,15 @@ def get_booking_time_slots(
     
     Example:
         get_booking_time_slots(
-            calendar_id="cal_abc123",
+            calendar_id="BKC-123",
             api_key="your_api_key_here",
             start_time="2024-12-01T00:00:00",
             end_time="2024-12-31T23:59:59"
         )
     """
     try:
-        if not api_key:
-            raise ValueError("API key is required for every request.")
-        # Construct the endpoint URL
+        # Get API key from context
+        api_key = get_api_key_from_context()
 
         # if not base_url:
         base_url = os.getenv("ONCEHUB_API_URL", "https://heisenbergapi.staticso2.com")
@@ -170,7 +177,7 @@ def get_booking_time_slots(
         return {
             "success": False,
             "error": str(e),
-            "user_friendly_error": "API key not configured. Please set ONCEHUB_API_KEY environment variable.",
+            "user_friendly_error": "API key not configured.",
             "status_code": None,
             "calendar_id": calendar_id
         }
@@ -203,7 +210,6 @@ def schedule_meeting(
     guest_time_zone: str,
     guest_name: str,
     guest_email: str,
-    api_key: str,
     guest_phone: Optional[str] = None,
     location_type: Optional[str] = None,
     location_value: Optional[str] = None,
@@ -237,9 +243,6 @@ def schedule_meeting(
         guest_email: The email address of the guest. Meeting confirmation and details 
                     will be sent to this email address.
                     Example: "john.smith@example.com"
-        
-        api_key: Your OnceHub API authentication key. Required for every request.
-                This should be kept secure and not shared publicly.
         
         guest_phone: (Optional) The guest's phone number for contact purposes.
                     Example: "+1-555-123-4567" or "555-123-4567"
@@ -294,8 +297,8 @@ def schedule_meeting(
         )
     """
     try:
-        if not api_key:
-            raise ValueError("API key is required for every request.")
+        # Get API key from context
+        api_key = get_api_key_from_context()
         
         # if not base_url:
         base_url = os.getenv("ONCEHUB_API_URL", "https://heisenbergapi.staticso2.com")
@@ -405,7 +408,7 @@ def schedule_meeting(
         return {
             "success": False,
             "error": str(e),
-            "user_friendly_error": "API key not configured. Please set ONCEHUB_API_KEY environment variable.",
+            "user_friendly_error": "API key not configured.",
             "status_code": None,
             "calendar_id": calendar_id
         }
@@ -435,4 +438,4 @@ def schedule_meeting(
         }
 
 if __name__ == "__main__":
-    asyncio.run(mcp.run_sse_async(host="0.0.0.0", port=8000, log_level="info"))
+    asyncio.run(mcp.run_async(transport="sse", host="0.0.0.0", port=8000))

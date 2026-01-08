@@ -83,7 +83,7 @@ cd C:\Projects\mcp-server
 $env:ONCEHUB_API_URL="https://heisenbergapi.staticso2.com"
 ```
 
-Note: `ONCEHUB_API_KEY` is not required as the API key is passed as a parameter to each tool.
+Note: `ONCEHUB_API_KEY` Need to pas as header at client side.
 
 ### 4. Run the server using uv
 
@@ -177,6 +177,58 @@ asyncio.run(mcp.run_sse_async(host="0.0.0.0", port=8000, log_level="debug"))
 ```
 
 Available log levels: `"debug"`, `"info"`, `"warning"`, `"error"`, `"critical"`
+
+## Client Configuration (VS Code/Copilot)
+
+To connect your VS Code or GitHub Copilot client to the MCP server:
+
+### 1. Create MCP Configuration File
+
+Create a file named `mcp.json` in your workspace's `.vscode` folder:
+
+```bash
+# Create .vscode directory if it doesn't exist
+mkdir .vscode
+
+# Create mcp.json file
+# On Windows PowerShell:
+New-Item -Path ".vscode\mcp.json" -ItemType File -Force
+
+# On macOS/Linux:
+touch .vscode/mcp.json
+```
+
+### 2. Add Server Configuration
+
+Add the following configuration to `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "my-mcp-server": {
+      "url": "http://0.0.0.0:8000/sse",
+      "type": "http",
+      "headers": {
+        "authorization": "Bearer YOUR_ONCEHUB_API_KEY"
+      }
+    }
+  },
+  "inputs": []
+}
+```
+
+**Important:** Replace `YOUR_ONCEHUB_API_KEY` with your actual OnceHub API key.
+
+### 3. Start/Restart the MCP Client
+
+- **For VS Code**: Reload the window (`Ctrl+Shift+P` or `Cmd+Shift+P` → "Developer: Reload Window")
+- **For GitHub Copilot**: Restart the GitHub Copilot extension or reload VS Code
+
+### 4. Verify Connection
+
+The MCP server should now be available to your AI assistant. You can verify by:
+- Checking that the server is running at `http://localhost:8000/health`
+- Testing a tool call like `get_booking_time_slots` through your AI assistant
 
 ## Troubleshooting
 
