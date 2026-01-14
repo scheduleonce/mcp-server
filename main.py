@@ -3,7 +3,8 @@ import asyncio
 import httpx
 import json
 import logging
-from typing import Optional, Dict, Any
+from typing import Annotated, Optional, Dict, Any
+from pydantic import Field
 from models import Location
 from fastapi.responses import JSONResponse
 from fastmcp import FastMCP
@@ -29,14 +30,6 @@ async def healthy_check(request):
     """Health check endpoint"""
     return JSONResponse({"status": "healthy", "service": "mcp-server"})
 
-@mcp.custom_route("/sse", methods=["POST"])
-async def sse_post_handler(request):
-    """Handle incorrect POST requests to SSE endpoint"""
-    return JSONResponse(
-        {"error": "SSE endpoint requires GET method, not POST"},
-        status_code=405
-    )
-
 def get_api_key_from_context() -> str:
     """Extract API key from FastMCP context"""
     try:
@@ -50,58 +43,21 @@ def get_api_key_from_context() -> str:
 
 @mcp.tool()
 def get_booking_time_slots(
-    calendar_id: str,
-    start_time: Optional[str] = None,
-    end_time: Optional[str] = None,
-    timeout: int = 30
+    calendar_id: Annotated[str, Field(..., description="The unique ID of the OnceHub booking calendar (e.g., 'BKC-XXXXXXXXXX')")],
+    start_time: Annotated[Optional[str], Field(default=None, description="The start time for filtering available slots, in ISO 8601 format (e.g., 'YYYY-MM-DDTHH:MM:SSZ')")] = None,
+    end_time: Annotated[Optional[str], Field(default=None, description="The end time for filtering available slots, in ISO 8601 format (e.g., 'YYYY-MM-DDTHH:MM:SSZ')")] = None,
+    timeout: Annotated[int, Field(default=30, description="Maximum seconds to wait for the API response")] = 30
 ) -> Dict[str, Any]:
     """
-    Retrieve all available time slots from an OnceHub booking calendar.
-    
-    Use this tool to fetch open time slots that customers can book. You can optionally filter 
-    the results by specifying a date/time range using start_time and end_time parameters.
-    
-    Args:
-        calendar_id: The unique identifier of the OnceHub booking calendar. 
-                    This ID identifies which calendar's time slots to fetch.
-                    Example: "BKC-123"
-        
-        start_time: (Optional) Only return time slots starting from this date/time onwards.
-                   Format: ISO 8601 datetime string (YYYY-MM-DDTHH:MM:SSZ)
-                   Example: "2024-01-15T09:00:00Z" for January 15, 2024 at 9:00 AM UTC
-                   If omitted, returns slots from the current date onwards.
-        
-        end_time: (Optional) Only return time slots up until this date/time.
-                 Format: ISO 8601 datetime string (YYYY-MM-DDTHH:MM:SSZ)
-                 Example: "2024-01-30T17:00:00Z" for January 30, 2024 at 5:00 PM UTC
-                 If omitted, returns slots up to the calendar's configured availability limit.
-        
-        timeout: Maximum seconds to wait for the API response before timing out.
-                Default is 30 seconds. Increase if dealing with slow network connections.
-    
-    Returns:
-        A dictionary containing:
-        - success (bool): Whether the request was successful
-        - status_code (int): HTTP response status code
-        - data (list): Array of available time slot objects with details
-        - total_slots (int): Number of available slots returned
-        - metadata (dict): Additional information about the slots
-        - error (str): Error message if the request failed
-    
-    Example:
-        get_booking_time_slots(
-            calendar_id="BKC-123",
-            api_key="your_api_key_here",
-            start_time="2024-12-01T00:00:00",
-            end_time="2024-12-31T23:59:59"
-        )
+    Retrieves a list of available booking time slots from a specific booking calendar. Use this tool before scheduling a meeting to ensure the desired time is valid.
+
     """
     try:
         # Get API key from context
         api_key = get_api_key_from_context()
 
         # if not base_url:
-        base_url = os.getenv("ONCEHUB_API_URL", "https://heisenbergapi.staticso2.com")
+        base_url = os.getenv("ONCEHUB_API_URL", "https://api.oncehub.com")
 
         url = f"{base_url.rstrip('/')}/v2/booking-calendars/{calendar_id}/time-slots"
 
@@ -205,103 +161,26 @@ def get_booking_time_slots(
 
 @mcp.tool()
 def schedule_meeting(
-    calendar_id: str,
-    start_time: str,
-    guest_time_zone: str,
-    guest_name: str,
-    guest_email: str,
-    guest_phone: Optional[str] = None,
-    location_type: Optional[str] = None,
-    location_value: Optional[str] = None,
-    timeout: int = 30,
-    custom_fields: object = None  # Accept any additional fields as custom fields
+    calendar_id: Annotated[str, Field(..., description="The unique ID of the OnceHub booking calendar (e.g., 'BKC-XXXXXXXXXX')")],
+    start_time: Annotated[str, Field(..., description="The exact start time of the slot in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)")],
+    guest_time_zone: Annotated[str, Field(..., description="The guest's time zone in IANA format (e.g., 'America/New_York', 'Europe/London')")],
+    guest_name: Annotated[str, Field(..., description="Full name of the guest")],
+    guest_email: Annotated[str, Field(..., description="Email address for confirmation")],
+    guest_phone: Annotated[Optional[str], Field(default=None, description="The guest's phone number in E.164 format (e.g., '+15551234567')")] = None,
+    location_type: Annotated[Optional[str], Field(default=None, description="The mode of the meeting. Allowed values: 'virtual', 'virtual_static', 'physical', 'guest_phone'. Values should match the options available in the relevant time slot result.")] = None,
+    location_value: Annotated[Optional[str], Field(default=None, description="Context-specific value based on location_type: If virtual: Specify the selected provider name (e.g., 'google_meet', 'microsoft_teams', 'gotomeeting', 'webex', or 'zoom'). If virtual_static: Use null. If physical: Provide the Address ID (e.g., 'ADD-XXXXXXXXXX'). If phone: Provide the phone number in E164 format.")] = None,
+    timeout: Annotated[int, Field(default=30, description="Maximum seconds to wait for the API response")] = 30,
+    custom_fields: Annotated[Optional[dict], Field(default=None, description="Key-value pairs for the booking form. Example: {'company': 'Acme', 'interests': ['Pricing', 'Demo']}")] = None  # Accept any additional fields as custom fields
 ) -> dict:
     """
-    Book a meeting in a specific time slot on an OnceHub calendar.
-    
-    Use this tool to schedule a new meeting/appointment for a guest at a specific date and time.
-    This will reserve the time slot and send confirmation to the guest's email.
-    
-    Args:
-        calendar_id: The unique identifier of the OnceHub booking calendar where the 
-                    meeting should be scheduled.
-                    Example: "cal_abc123"
-        
-        start_time: The exact date and time when the meeting should start.
-                   Format: ISO 8601 datetime string (YYYY-MM-DDTHH:MM:SS)
-                   Example: "2024-01-15T14:30:00" for January 15, 2024 at 2:30 PM
-                   This must be one of the available time slots from get_booking_time_slots.
-        
-        guest_time_zone: The timezone of the guest in IANA timezone format.
-                        This ensures times are displayed correctly to the guest.
-                        Examples: "America/New_York", "Europe/London", "Asia/Tokyo", "UTC"
-                        Find valid timezones at: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
-        
-        guest_name: The full name of the person booking the meeting.
-                   Example: "John Smith" or "Jane Doe"
-        
-        guest_email: The email address of the guest. Meeting confirmation and details 
-                    will be sent to this email address.
-                    Example: "john.smith@example.com"
-        
-        guest_phone: (Optional) The guest's phone number for contact purposes.
-                    Example: "+1-555-123-4567" or "555-123-4567"
-        
-        location_type: (Optional) Specifies how the meeting will be conducted.
-            Valid values:
-            - "virtual": Online meeting (e.g., Zoom, Teams, Google Meet)
-            - "virtual_static": Static video conferencing links
-            - "physical": In-person meeting at a physical address
-            - "phone": Phone call meeting
-        
-        location_value: (Optional) 
-            - For virtual meetings, specify one of the following: 
-                - google_meet, microsoft_teams, gotomeeting, webex, or zoom. 
-            - For static video conferencing links, use null. 
-            - For phone calls, use the guest's phone number in E164 format. 
-            - For in-person meetings, use the location's address ID (e.g., ADD-1234).
-        
-        custom_fields: (Optional) Additional custom fields as key-value pairs to be added to booking form.
-            Supports both string values and list values:
-            - String fields: {"city_name": "haryana", "company": "Acme Corp"}
-            - List fields: {"interests": ["Demo", "Pricing"], "skills": ["Python", "JavaScript"]}
-            
-            Example: {
-                "city_name": "haryana",
-                "company": "Acme Corp",
-                "interests": ["Product Demo", "Pricing"],
-                "department": "Engineering"
-            }
-    
-    Returns:
-        A dictionary containing:
-        - success (bool): Whether the booking was successful
-        - status_code (int): HTTP response status code
-        - booking_id (str): Unique identifier for the created booking
-        - meeting_details (dict): Complete meeting information from OnceHub
-        - confirmation (dict): Summary of booking details including guest info, time, and location
-        - error (str): Error message if the booking failed
-        - user_friendly_error (str): Human-readable error explanation
-    
-    Example:
-        schedule_meeting(
-            calendar_id="cal_abc123",
-            start_time="2024-01-15T14:30:00",
-            guest_time_zone="America/New_York",
-            guest_name="John Smith",
-            guest_email="john.smith@example.com",
-            api_key="your_api_key_here",
-            guest_phone="+1-555-123-4567",
-            location_type="virtual",
-            location_value="https://zoom.us/j/123456789"
-        )
+    Books a meeting in a specific time slot and before that you must identify a valid start_time using get_booking_time_slots before calling this tool.
     """
     try:
         # Get API key from context
         api_key = get_api_key_from_context()
         
         # if not base_url:
-        base_url = os.getenv("ONCEHUB_API_URL", "https://heisenbergapi.staticso2.com")
+        base_url = os.getenv("ONCEHUB_API_URL", "https://api.oncehub.com")
         
         # Construct the endpoint URL
         url = f"{base_url.rstrip('/')}/v2/booking-calendars/{calendar_id}/schedule"
