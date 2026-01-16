@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import asyncio
 import httpx
@@ -50,11 +51,6 @@ CRITICAL RULES FOR TIME SLOT BOOKING:
    - If agent receives error about invalid time format, retry with ISO 8601 format
    - If timezone error, convert to IANA format (America/Chicago, not CST)
 """
-
-# Add instructions comment to make them visible to the AI
-logger.info(f"System Instructions Active: {SYSTEM_INSTRUCTIONS}")
-# ============================================================
-
 def validate_iso8601_format(time_string: str, field_name: str = "time") -> bool:
     """
     Validate that a time string is in ISO 8601 format.
@@ -148,6 +144,7 @@ def get_booking_rules() -> str:
     Agents connecting to this MCP server should read this resource
     to understand the critical rules for booking operations.
     """
+    logger.info(f"******************System instruction is getting read***********************")
     return SYSTEM_INSTRUCTIONS
 
 def get_api_key_from_context() -> str:
@@ -171,6 +168,7 @@ def get_booking_time_slots(
     """
     Retrieves a list of available booking time slots from a specific booking calendar.
     Returns valid time slots that can be used with schedule_meeting.
+    Respone slots are always in UTC timezone like: YYYY-MM-DDTHH:MM:SSZ.
     Read the system://booking-rules resource for important constraints.
     """
     try:
@@ -319,16 +317,16 @@ def get_booking_time_slots(
 
 @mcp.tool()
 def schedule_meeting(
-    calendar_id: Annotated[str, Field(..., description="The unique ID of the OnceHub booking calendar (e.g., 'BKC-XXXXXXXXXX').")],
-    start_time: Annotated[str, Field(..., description="The exact start time in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). Must be from get_booking_time_slots response.")],
-    guest_time_zone: Annotated[str, Field(..., description="Guest's timezone in IANA format (e.g., 'America/New_York', 'Europe/London', 'Asia/Tokyo').")],
+    calendar_id: Annotated[str, Field(..., description="The unique ID of the OnceHub booking calendar (e.g., 'BKC-XXXXXXXXXX')")],
+    start_time: Annotated[str, Field(..., description="The exact start time of the slot in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)")],
+    guest_time_zone: Annotated[str, Field(..., description="The guest's time zone in IANA format (e.g., 'America/New_York', 'Europe/London')")],
     guest_name: Annotated[str, Field(..., description="Full name of the guest")],
-    guest_email: Annotated[str, Field(..., description="Email address for confirmation (e.g., user@example.com)")],
-    guest_phone: Annotated[Optional[str], Field(default=None, description="Guest's phone number in E.164 format (e.g., '+15551234567')")] = None,
-    location_type: Annotated[Optional[str], Field(default=None, description="Meeting mode: 'virtual', 'virtual_static', 'physical', or 'guest_phone'")] = None,
-    location_value: Annotated[Optional[str], Field(default=None, description="Location details based on type: provider for virtual, address ID for physical, phone for guest_phone")] = None,
+    guest_email: Annotated[str, Field(..., description="Email address for confirmation")],
+    guest_phone: Annotated[Optional[str], Field(default=None, description="The guest's phone number in E.164 format (e.g., '+15551234567')")] = None,
+    location_type: Annotated[Optional[str], Field(default=None, description="The mode of the meeting. Allowed values: 'virtual', 'virtual_static', 'physical', 'guest_phone'. Values should match the options available in the relevant time slot result.")] = None,
+    location_value: Annotated[Optional[str], Field(default=None, description="Context-specific value based on location_type: If virtual: Specify the selected provider name (e.g., 'google_meet', 'microsoft_teams', 'gotomeeting', 'webex', or 'zoom'). If virtual_static: Use null. If physical: Provide the Address ID (e.g., 'ADD-XXXXXXXXXX'). If phone: Provide the phone number in E164 format.")] = None,
     timeout: Annotated[int, Field(default=30, description="Maximum seconds to wait for the API response")] = 30,
-    custom_fields: Annotated[Optional[dict], Field(default=None, description="Custom form fields (e.g., {'company': 'Acme', 'interests': ['Pricing']}))")] = None
+    custom_fields: Annotated[Optional[dict], Field(default=None, description="Key-value pairs for the booking form. Example: {'company': 'Acme', 'interests': ['Pricing', 'Demo']}")] = None  # Accept any additional fields as custom fields
 ) -> dict:
     """
       Books a meeting in a specific time slot and before that you must identify a valid start_time using get_booking_time_slots before calling this tool.
