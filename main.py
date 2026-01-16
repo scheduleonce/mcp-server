@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import asyncio
 import httpx
@@ -50,11 +51,6 @@ CRITICAL RULES FOR TIME SLOT BOOKING:
    - If agent receives error about invalid time format, retry with ISO 8601 format
    - If timezone error, convert to IANA format (America/Chicago, not CST)
 """
-
-# Add instructions comment to make them visible to the AI
-logger.info(f"System Instructions Active: {SYSTEM_INSTRUCTIONS}")
-# ============================================================
-
 def validate_iso8601_format(time_string: str, field_name: str = "time") -> bool:
     """
     Validate that a time string is in ISO 8601 format.
@@ -126,10 +122,26 @@ def validate_email(email: str) -> bool:
     logger.info(f"✓ Valid email: {email}")
     return True
 
+def log_resource_access(resource_uri: str, access_method: str = "read") -> None:
+    """
+    Log when MCP resources are accessed.
+    Helps track if agents are correctly reading resources.
+    """
+    logger.info(f"📊 RESOURCE ACCESS: {resource_uri} [{access_method}] - Agent successfully accessed booking rules")
+    logger.info(f"🎯 RESOURCE VERIFIED: Resource system://booking-rules is now available to the agent")
+
 # ============================================================
 
-# Create an MCP server
-mcp = FastMCP(name = "mcp-server")
+# Create an MCP server with explicit resource capabilities
+mcp = FastMCP(
+    name="mcp-server",
+    capabilities={
+        "resources": {
+            "subscribe": True,
+            "listChanged": True
+        }
+    }
+)
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request):
@@ -141,13 +153,42 @@ async def healthy_check(request):
     """Health check endpoint"""
     return JSONResponse({"status": "healthy", "service": "mcp-server"})
 
-@mcp.resource("system://booking-rules")
+@mcp.resource(
+    uri="system://booking-rules",
+    name="Booking Rules",
+    title="🔐 Booking Rules & Constraints",
+    description="CRITICAL system rules that MUST be followed for all time slot booking operations. Covers time format validation, timezone validation, workflow requirements, and error recovery.",
+    mime_type="text/plain"
+)
 def get_booking_rules() -> str:
     """
     System instructions for time slot booking agents.
     Agents connecting to this MCP server should read this resource
     to understand the critical rules for booking operations.
+    
+    ANNOTATIONS:
+    - audience: ["assistant"] - intended for AI agents, not humans
+    - priority: 1.0 - CRITICAL importance (highest priority)
+    - This resource MUST be read before calling any booking tools
     """
+    log_resource_access("system://booking-rules", "read")
+    return SYSTEM_INSTRUCTIONS
+
+@mcp.tool()
+def read_booking_rules() -> str:
+    """
+    Returns the complete booking rules and constraints for time slot operations.
+    
+    INSTRUCTIONS:
+    - Call this tool FIRST before calling any booking tools
+    - Use immediately when starting any booking operation
+    - Apply all returned rules throughout the booking workflow
+    
+    COVERAGE:
+    Time format validation, timezone formats, workflow steps,
+    validation checks, and error recovery procedures.
+    """
+    log_resource_access("booking-rules", "tool")
     return SYSTEM_INSTRUCTIONS
 
 def get_api_key_from_context() -> str:
@@ -169,9 +210,17 @@ def get_booking_time_slots(
     timeout: Annotated[int, Field(default=30, description="Maximum seconds to wait for the API response")] = 30
 ) -> Dict[str, Any]:
     """
-    Retrieves a list of available booking time slots from a specific booking calendar.
-    Returns valid time slots that can be used with schedule_meeting.
-    Read the system://booking-rules resource for important constraints.
+    Retrieves available time slots for a calendar. Returns slots in UTC (YYYY-MM-DDTHH:MM:SSZ format).
+    
+    INSTRUCTIONS:
+    1. Call read_booking_rules() first to understand time validation rules
+    2. Use returned slots ONLY with schedule_meeting tool
+    3. Extract exact time values from response
+    
+    CRITICAL REQUIREMENTS:
+    - Do NOT invent or guess time slots
+    - All times must be ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)
+    - All responses are in UTC timezone
     """
     try:
         # ========== INPUT VALIDATION ==========
@@ -319,20 +368,31 @@ def get_booking_time_slots(
 
 @mcp.tool()
 def schedule_meeting(
-    calendar_id: Annotated[str, Field(..., description="The unique ID of the OnceHub booking calendar (e.g., 'BKC-XXXXXXXXXX').")],
-    start_time: Annotated[str, Field(..., description="The exact start time in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). Must be from get_booking_time_slots response.")],
-    guest_time_zone: Annotated[str, Field(..., description="Guest's timezone in IANA format (e.g., 'America/New_York', 'Europe/London', 'Asia/Tokyo').")],
+    calendar_id: Annotated[str, Field(..., description="The unique ID of the OnceHub booking calendar (e.g., 'BKC-XXXXXXXXXX')")],
+    start_time: Annotated[str, Field(..., description="The exact start time of the slot in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)")],
+    guest_time_zone: Annotated[str, Field(..., description="The guest's time zone in IANA format (e.g., 'America/New_York', 'Europe/London')")],
     guest_name: Annotated[str, Field(..., description="Full name of the guest")],
-    guest_email: Annotated[str, Field(..., description="Email address for confirmation (e.g., user@example.com)")],
-    guest_phone: Annotated[Optional[str], Field(default=None, description="Guest's phone number in E.164 format (e.g., '+15551234567')")] = None,
-    location_type: Annotated[Optional[str], Field(default=None, description="Meeting mode: 'virtual', 'virtual_static', 'physical', or 'guest_phone'")] = None,
-    location_value: Annotated[Optional[str], Field(default=None, description="Location details based on type: provider for virtual, address ID for physical, phone for guest_phone")] = None,
+    guest_email: Annotated[str, Field(..., description="Email address for confirmation")],
+    guest_phone: Annotated[Optional[str], Field(default=None, description="The guest's phone number in E.164 format (e.g., '+15551234567')")] = None,
+    location_type: Annotated[Optional[str], Field(default=None, description="The mode of the meeting. Allowed values: 'virtual', 'virtual_static', 'physical', 'guest_phone'. Values should match the options available in the relevant time slot result.")] = None,
+    location_value: Annotated[Optional[str], Field(default=None, description="Context-specific value based on location_type: If virtual: Specify the selected provider name (e.g., 'google_meet', 'microsoft_teams', 'gotomeeting', 'webex', or 'zoom'). If virtual_static: Use null. If physical: Provide the Address ID (e.g., 'ADD-XXXXXXXXXX'). If phone: Provide the phone number in E164 format.")] = None,
     timeout: Annotated[int, Field(default=30, description="Maximum seconds to wait for the API response")] = 30,
-    custom_fields: Annotated[Optional[dict], Field(default=None, description="Custom form fields (e.g., {'company': 'Acme', 'interests': ['Pricing']}))")] = None
+    custom_fields: Annotated[Optional[dict], Field(default=None, description="Key-value pairs for the booking form. Example: {'company': 'Acme', 'interests': ['Pricing', 'Demo']}")] = None  # Accept any additional fields as custom fields
 ) -> dict:
     """
-      Books a meeting in a specific time slot and before that you must identify a valid start_time using get_booking_time_slots before calling this tool.
-    Read the system://booking-rules resource for workflow and validation requirements.
+    Books a meeting for a guest in a specific time slot.
+    
+    WORKFLOW:
+    1. Call read_booking_rules() to understand format requirements
+    2. Call get_booking_time_slots() to get valid time slots
+    3. Use ONLY the exact start_time from step 2
+    4. Provide guest details and location information
+    
+    CRITICAL REQUIREMENTS:
+    - start_time: ISO 8601 format YYYY-MM-DDTHH:MM:SSZ (NOT "2pm" or "14:30")
+    - guest_time_zone: IANA format like 'America/New_York' (NOT "EST" or "UTC+5")
+    - start_time: Must come from get_booking_time_slots response
+    - Email must be valid format
     """
     try:
         # ========== INPUT VALIDATION ==========
