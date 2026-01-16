@@ -122,10 +122,26 @@ def validate_email(email: str) -> bool:
     logger.info(f"✓ Valid email: {email}")
     return True
 
+def log_resource_access(resource_uri: str, access_method: str = "read") -> None:
+    """
+    Log when MCP resources are accessed.
+    Helps track if agents are correctly reading resources.
+    """
+    logger.info(f"📊 RESOURCE ACCESS: {resource_uri} [{access_method}] - Agent successfully accessed booking rules")
+    logger.info(f"🎯 RESOURCE VERIFIED: Resource system://booking-rules is now available to the agent")
+
 # ============================================================
 
-# Create an MCP server
-mcp = FastMCP(name = "mcp-server")
+# Create an MCP server with explicit resource capabilities
+mcp = FastMCP(
+    name="mcp-server",
+    capabilities={
+        "resources": {
+            "subscribe": True,
+            "listChanged": True
+        }
+    }
+)
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request):
@@ -137,14 +153,42 @@ async def healthy_check(request):
     """Health check endpoint"""
     return JSONResponse({"status": "healthy", "service": "mcp-server"})
 
-@mcp.resource("system://booking-rules")
+@mcp.resource(
+    uri="system://booking-rules",
+    name="Booking Rules",
+    title="🔐 Booking Rules & Constraints",
+    description="CRITICAL system rules that MUST be followed for all time slot booking operations. Covers time format validation, timezone validation, workflow requirements, and error recovery.",
+    mime_type="text/plain"
+)
 def get_booking_rules() -> str:
     """
     System instructions for time slot booking agents.
     Agents connecting to this MCP server should read this resource
     to understand the critical rules for booking operations.
+    
+    ANNOTATIONS:
+    - audience: ["assistant"] - intended for AI agents, not humans
+    - priority: 1.0 - CRITICAL importance (highest priority)
+    - This resource MUST be read before calling any booking tools
     """
-    logger.info(f"******************System instruction is getting read***********************")
+    log_resource_access("system://booking-rules", "read")
+    return SYSTEM_INSTRUCTIONS
+
+@mcp.tool()
+def read_booking_rules() -> str:
+    """
+    Returns the complete booking rules and constraints for time slot operations.
+    
+    INSTRUCTIONS:
+    - Call this tool FIRST before calling any booking tools
+    - Use immediately when starting any booking operation
+    - Apply all returned rules throughout the booking workflow
+    
+    COVERAGE:
+    Time format validation, timezone formats, workflow steps,
+    validation checks, and error recovery procedures.
+    """
+    log_resource_access("booking-rules", "tool")
     return SYSTEM_INSTRUCTIONS
 
 def get_api_key_from_context() -> str:
@@ -166,10 +210,17 @@ def get_booking_time_slots(
     timeout: Annotated[int, Field(default=30, description="Maximum seconds to wait for the API response")] = 30
 ) -> Dict[str, Any]:
     """
-    Retrieves a list of available booking time slots from a specific booking calendar.
-    Returns valid time slots that can be used with schedule_meeting.
-    Respone slots are always in UTC timezone like: YYYY-MM-DDTHH:MM:SSZ.
-    Read the system://booking-rules resource for important constraints.
+    Retrieves available time slots for a calendar. Returns slots in UTC (YYYY-MM-DDTHH:MM:SSZ format).
+    
+    INSTRUCTIONS:
+    1. Call read_booking_rules() first to understand time validation rules
+    2. Use returned slots ONLY with schedule_meeting tool
+    3. Extract exact time values from response
+    
+    CRITICAL REQUIREMENTS:
+    - Do NOT invent or guess time slots
+    - All times must be ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)
+    - All responses are in UTC timezone
     """
     try:
         # ========== INPUT VALIDATION ==========
@@ -329,8 +380,19 @@ def schedule_meeting(
     custom_fields: Annotated[Optional[dict], Field(default=None, description="Key-value pairs for the booking form. Example: {'company': 'Acme', 'interests': ['Pricing', 'Demo']}")] = None  # Accept any additional fields as custom fields
 ) -> dict:
     """
-      Books a meeting in a specific time slot and before that you must identify a valid start_time using get_booking_time_slots before calling this tool.
-    Read the system://booking-rules resource for workflow and validation requirements.
+    Books a meeting for a guest in a specific time slot.
+    
+    WORKFLOW:
+    1. Call read_booking_rules() to understand format requirements
+    2. Call get_booking_time_slots() to get valid time slots
+    3. Use ONLY the exact start_time from step 2
+    4. Provide guest details and location information
+    
+    CRITICAL REQUIREMENTS:
+    - start_time: ISO 8601 format YYYY-MM-DDTHH:MM:SSZ (NOT "2pm" or "14:30")
+    - guest_time_zone: IANA format like 'America/New_York' (NOT "EST" or "UTC+5")
+    - start_time: Must come from get_booking_time_slots response
+    - Email must be valid format
     """
     try:
         # ========== INPUT VALIDATION ==========
