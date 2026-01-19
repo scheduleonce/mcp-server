@@ -50,6 +50,30 @@ CRITICAL RULES FOR TIME SLOT BOOKING:
 5. ERROR RECOVERY:
    - If agent receives error about invalid time format, retry with ISO 8601 format
    - If timezone error, convert to IANA format (America/Chicago, not CST)
+
+6. GETTING TIME SLOTS WORKFLOW:
+   Step 1: Call get_booking_time_slots() with calendar_id
+   Step 2: Extract exact time values from response
+   Step 3: Use ONLY the returned slots with schedule_meeting tool
+   
+   CRITICAL REQUIREMENTS:
+   - Do NOT invent or guess time slots
+   - All times must be ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)
+   - All responses are in UTC timezone
+
+7. BOOKING TIME SLOT WORKFLOW:
+
+   Step 1: Call get_booking_time_slots() to get available time slots
+   Step 2: Use ONLY the exact start_time from the time slots response
+   Step 3: Provide guest details (name, email, timezone)
+   Step 4: Call schedule_meeting() with validated data
+
+   CRITICAL REQUIREMENTS:
+   - start_time: MUST be ISO 8601 format YYYY-MM-DDTHH:MM:SSZ (NOT "2pm" or "14:30")
+   - guest_time_zone: MUST be IANA format like 'America/New_York' (NOT "EST" or "UTC+5")
+   - start_time: MUST come from get_booking_time_slots response
+   - Email: Must be valid format (user@example.com)
+
 """
 def validate_iso8601_format(time_string: str, field_name: str = "time") -> bool:
     """
@@ -132,16 +156,9 @@ def log_resource_access(resource_uri: str, access_method: str = "read") -> None:
 
 # ============================================================
 
-# Create an MCP server with explicit resource capabilities
-mcp = FastMCP(
-    name="mcp-server",
-    capabilities={
-        "resources": {
-            "subscribe": True,
-            "listChanged": True
-        }
-    }
-)
+# Create an MCP server instance
+# Note: FastMCP automatically detects capabilities from @mcp.resource() and @mcp.tool() decorators
+mcp = FastMCP(name="mcp-server")
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request):
@@ -210,17 +227,9 @@ def get_booking_time_slots(
     timeout: Annotated[int, Field(default=30, description="Maximum seconds to wait for the API response")] = 30
 ) -> Dict[str, Any]:
     """
-    Retrieves available time slots for a calendar. Returns slots in UTC (YYYY-MM-DDTHH:MM:SSZ format).
-    
-    INSTRUCTIONS:
-    1. Call read_booking_rules() first to understand time validation rules
-    2. Use returned slots ONLY with schedule_meeting tool
-    3. Extract exact time values from response
-    
-    CRITICAL REQUIREMENTS:
-    - Do NOT invent or guess time slots
-    - All times must be ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)
-    - All responses are in UTC timezone
+    This tool Retrieves available time slots for a calendar and returns them in UTC (YYYY-MM-DDTHH:MM:SSZ format).
+    It will call read_booking_rules() first to understand time validation rules.
+
     """
     try:
         # ========== INPUT VALIDATION ==========
@@ -380,19 +389,9 @@ def schedule_meeting(
     custom_fields: Annotated[Optional[dict], Field(default=None, description="Key-value pairs for the booking form. Example: {'company': 'Acme', 'interests': ['Pricing', 'Demo']}")] = None  # Accept any additional fields as custom fields
 ) -> dict:
     """
-    Books a meeting for a guest in a specific time slot.
-    
-    WORKFLOW:
-    1. Call read_booking_rules() to understand format requirements
-    2. Call get_booking_time_slots() to get valid time slots
-    3. Use ONLY the exact start_time from step 2
-    4. Provide guest details and location information
-    
-    CRITICAL REQUIREMENTS:
-    - start_time: ISO 8601 format YYYY-MM-DDTHH:MM:SSZ (NOT "2pm" or "14:30")
-    - guest_time_zone: IANA format like 'America/New_York' (NOT "EST" or "UTC+5")
-    - start_time: Must come from get_booking_time_slots response
-    - Email must be valid format
+    This tool is used to Books a meeting for a guest in a specific time slot suggested by get_booking_time_slots().
+    It will call read_booking_rules() first to understand time validation rules.
+
     """
     try:
         # ========== INPUT VALIDATION ==========
