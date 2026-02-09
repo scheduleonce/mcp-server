@@ -10,6 +10,7 @@ dependencies = [
     "fastmcp>=2.13.0.2",
     "httpx>=0.24.1",
     "pydantic>=2.12.4",
+    "pytz>=2024.1",
 ]
 
 [project.optional-dependencies]
