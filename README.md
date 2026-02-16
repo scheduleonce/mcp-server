@@ -5,7 +5,8 @@
 [![Code Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen.svg)]()
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io)
 
-A Model Context Protocol (MCP) server for OnceHub booking integration. This server provides AI assistants with tools to fetch available time slots and schedule meetings through the OnceHub API.
+The OnceHub MCP Server provides a standardized way for `AI models` and `agents` to interact directly with your OnceHub scheduling API. Rather than sending users a booking link and asking them to schedule manually, an AI Agent can retrieve availability and schedule meetings on the user’s behalf using MCP tools, through a natural language flow. 
+This solution enables external AI Agents to access OnceHub scheduling APIs within AI-driven workflows using the standardized Model Context Protocol (MCP) remote server.
 
 **Compatible with:** VS Code Copilot, Claude Desktop, OpenAI, and any MCP-compatible AI client.
 
@@ -14,9 +15,9 @@ A Model Context Protocol (MCP) server for OnceHub booking integration. This serv
 - [Quick Start](#quick-start)
 - [Architecture](#architecture)
 - [Tools](#tools)
+- [Client Configuration](#client-configuration)
 - [Installation](#installation--running-locally-with-uv)
 - [Testing](#testing)
-- [Client Configuration](#client-configuration)
 - [Production Deployment](#production-deployment)
 - [Contributing](#contributing)
 - [License](#license)
@@ -24,7 +25,7 @@ A Model Context Protocol (MCP) server for OnceHub booking integration. This serv
 ## Features
 
 - 🔌 **MCP Protocol Support** - Works with any MCP-compatible AI client
-- 📅 **Time Slot Retrieval** - Fetch available booking slots from OnceHub calendars
+- 📅 **Time Slot Retrieval** - Fetch available booking slots from OnceHub booking calendars
 - 🗓️ **Meeting Scheduling** - Automatically schedule meetings with guest information
 - 🔐 **Secure Authentication** - API key-based authentication via headers
 - 🧪 **Well Tested** - 92% code coverage with comprehensive unit tests
@@ -33,22 +34,39 @@ A Model Context Protocol (MCP) server for OnceHub booking integration. This serv
 
 ## Quick Start
 
-```bash
-# 1. Clone the repository
-git clone https://github.com/scheduleonce/mcp-server.git
-cd mcp-server
+Get started with the OnceHub MCP Server in your AI client:
 
-# 2. Set environment variable
-export ONCEHUB_API_URL="https://api.oncehub.com"  # Or your OnceHub API endpoint
+### 1. Get Your API Key
+Obtain your OnceHub API key from the [Authentication documentation](https://developers.oncehub.com/docs/overview/authentication/).
 
-# 3. Run the server
-uv run main.py
+### 2. Configure Your Client
+Create `.vscode/mcp.json` in your workspace:
 
-# 4. Test the server
-curl http://localhost:8000/health
+```json
+{
+  "servers": {
+    "oncehub": {
+      "url": "https://mcp.oncehub.com/sse",
+      "type": "http",
+      "headers": {
+        "authorization": "Bearer YOUR_ONCEHUB_API_KEY"
+      }
+    }
+  }
+}
 ```
 
-The server will be available at `http://localhost:8000/sse` for MCP clients.
+Replace `YOUR_ONCEHUB_API_KEY` with your actual API key.
+
+### 3. Start Using
+Ask your AI assistant to:
+- "Show me available time slots for calendar BKC-XXXXXXXXXX"
+- "Schedule a meeting for tomorrow at 2 PM with John Doe"
+
+> **Note:** Running your own MCP server? See [Installation & Running Locally](#installation--running-locally-with-uv) for setup instructions.
+
+> Production Server: Our hosted MCP server is available at:  
+> `https://mcp.oncehub.com/sse` 
 
 ## Architecture
 ![Architecture](./images/mcp-server_architecture.png)
@@ -144,6 +162,85 @@ ONCEHUB_API_URL=https://api.oncehub.com
 # Note: API key is passed via Authorization header from MCP clients
 # Do NOT commit API keys to version control
 ```
+
+## Client Configuration
+
+This MCP server is compatible with **VS Code Copilot**, **Claude Desktop**, **OpenAI**, and other MCP-compatible clients.
+
+### VS Code / GitHub Copilot
+
+#### Step 1: Create Configuration Directory
+
+**Windows (PowerShell):**
+```powershell
+New-Item -Path ".vscode" -ItemType Directory -Force
+New-Item -Path ".vscode\mcp.json" -ItemType File -Force
+```
+
+**macOS/Linux:**
+```bash
+mkdir -p .vscode
+touch .vscode/mcp.json
+```
+
+#### Step 2: Configure the Server
+
+Edit `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "oncehub": {
+      "url": "http://0.0.0.0:8000/sse",
+      "type": "http",
+      "headers": {
+        "authorization": "Bearer YOUR_ONCEHUB_API_KEY"
+      }
+    }
+  }
+}
+```
+
+**Configuration Options:**
+- `url`: The MCP server endpoint (change to your server URL if self-hosting)
+- `authorization`: Your OnceHub API key with `Bearer ` prefix
+- Server name (`oncehub`): Can be customized to any identifier
+
+#### Step 3: Reload VS Code
+
+After saving the configuration, reload VS Code to activate the MCP server connection.
+
+### Claude Desktop
+
+Edit your Claude Desktop configuration file:
+
+**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "oncehub": {
+      "url": "http://0.0.0.0:8000/sse",
+      "headers": {
+        "authorization": "Bearer YOUR_ONCEHUB_API_KEY"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop after saving.
+
+### Other MCP Clients
+
+For other MCP-compatible clients, configure them to connect to:
+- **Endpoint:** `http://0.0.0.0:8000/sse`
+- **Protocol:** HTTP with Server-Sent Events (SSE)
+- **Authentication:** Bearer token in `Authorization` header
+
+**Security Note:** Never commit API keys to version control. Use environment variables or secure secret management for production deployments.
 
 ## Installation & Running Locally with uv
 
@@ -362,62 +459,6 @@ xdg-open htmlcov/index.html
   - `TestScheduleMeeting` - Tests for meeting scheduling
 
 All tests use mocking to avoid actual API calls and ensure fast, reliable test execution.
-
-## Client Configuration
-
-This MCP server is compatible with **VS Code Copilot**, **OpenAI**, and other MCP-compatible clients.
-
-### Connecting VS Code or GitHub Copilot
-
-To connect your VS Code or GitHub Copilot client to the MCP server:
-
-### 1. Create MCP Configuration File
-
-Create a file named `mcp.json` in your workspace's `.vscode` folder:
-
-```bash
-# Create .vscode directory if it doesn't exist
-mkdir .vscode
-
-# Create mcp.json file
-# On Windows PowerShell:
-New-Item -Path ".vscode\mcp.json" -ItemType File -Force
-
-# On macOS/Linux:
-touch .vscode/mcp.json
-```
-
-### 2. Add Server Configuration
-
-Add the following configuration to `.vscode/mcp.json`:
-
-```json
-{
-  "servers": {
-    "my-mcp-server": {
-      "url": "http://0.0.0.0:8000/sse",
-      "type": "http",
-      "headers": {
-        "authorization": "Bearer YOUR_ONCEHUB_API_KEY"
-      }
-    }
-  },
-  "inputs": []
-}
-```
-
-**Important:** Replace `YOUR_ONCEHUB_API_KEY` with your actual OnceHub API key.
-
-### 3. Start/Restart the MCP Client
-
-- **For VS Code**: Reload the window (`Ctrl+Shift+P` or `Cmd+Shift+P` → "Developer: Reload Window")
-- **For GitHub Copilot**: Restart the GitHub Copilot extension or reload VS Code
-
-### 4. Verify Connection
-
-The MCP server should now be available to your AI assistant. You can verify by:
-- Checking that the server is running at `http://localhost:8000/health`
-- Testing a tool call like `get_booking_time_slots` through your AI assistant
 
 ## Production Deployment
 
