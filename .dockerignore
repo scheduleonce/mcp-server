@@ -10,6 +10,9 @@ ENV/
 env/
 *.egg-info/
 *.egg
+.vscode/
+htmlcov/
+.coverage
 
 # IDE
 .vscode/

@@ -14,7 +14,7 @@ COPY pyproject.toml README.md ./
 RUN uv pip install --system --no-cache .
 
 # Copy the rest of the application code
-COPY main.py models.py ./
+COPY main.py models.py tools.py ./
 
 # Expose the port the app runs on
 EXPOSE 8000
