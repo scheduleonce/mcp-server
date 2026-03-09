@@ -63,10 +63,9 @@ Ask your AI assistant to:
 - "Show me available time slots for calendar BKC-XXXXXXXXXX"
 - "Schedule a meeting for tomorrow at 2 PM with John Doe"
 
-> **Note:** Running your own MCP server? See [Installation & Running Locally](#installation--running-locally-with-uv) for setup instructions.
+⚠️ **Running your own MCP server?** See [Installation & Running Locally](#installation--running-locally-with-uv) for setup instructions.
 
-> Production Server: Our hosted MCP server is available at:  
-> `https://mcp.oncehub.com/sse` 
+✅ **Production Server:** Our hosted MCP server is available at `https://mcp.oncehub.com/sse`.
 
 ## Architecture
 ![Architecture](./images/mcp-server_architecture.png)
@@ -550,4 +549,4 @@ This project is licensed under the terms of the MIT open source license. Please 
 
 ---
 
-**Made by the ScheduleOnce team**
+**Made by the Oncehub team**
