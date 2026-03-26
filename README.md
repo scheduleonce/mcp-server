@@ -8,7 +8,7 @@
 The OnceHub MCP Server provides a standardized way for `AI models` and `agents` to interact directly with your OnceHub scheduling API. Rather than sending users a booking link and asking them to schedule manually, an AI Agent can retrieve availability and schedule meetings on the user’s behalf using MCP tools, through a natural language flow. 
 This solution enables external AI Agents to access OnceHub scheduling APIs within AI-driven workflows using the standardized Model Context Protocol (MCP) remote server.
 
-**Compatible with:** VS Code Copilot, Claude Desktop, OpenAI, and any MCP-compatible AI client.
+**Compatible with:** VS Code Copilot, OpenAI, and any MCP-compatible AI client.
 
 ## Table of Contents
 - [Features](#features)
@@ -367,7 +367,9 @@ Logs are output to the console with timestamps and log levels.
 ## API Endpoints
 
 - `GET /health` - Health check endpoint
+- `GET /healthy` - Alternate health check endpoint
 - `GET /sse` - Server-Sent Events endpoint for MCP protocol communication
+- `GET /tools` - Returns the registered MCP tools with their descriptions, required parameters, and input field details
 
 ## Development
 
