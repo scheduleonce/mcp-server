@@ -37,6 +37,78 @@ class TestMainMCPServer:
         body = json.loads(response.body.decode())
         assert body["status"] == "healthy"
         assert body["service"] == "mcp-server"
+
+    @pytest.mark.asyncio
+    async def test_tools_list_endpoint_response(self):
+        """Test tools list endpoint returns expected metadata structure."""
+        import json
+        import main
+
+        class MockClientContext:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def list_tools(self):
+                return [
+                    {
+                        "name": "get_booking_time_slots",
+                        "description": "Get available slots",
+                        "inputSchema": {
+                            "type": "object",
+                            "required": ["calendar_id"],
+                            "properties": {
+                                "calendar_id": {
+                                    "type": "string",
+                                    "description": "Calendar id",
+                                },
+                                "start_time": {
+                                    "type": "string",
+                                    "description": "Start time",
+                                },
+                            },
+                        },
+                    }
+                ]
+
+        with patch("main.Client", return_value=MockClientContext()):
+            mock_request = Mock()
+            response = await main.tools_list(mock_request)
+
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 200
+
+        body = json.loads(response.body.decode())
+        assert body["success"] is True
+        assert body["total_tools"] == 1
+        assert body["tools"][0]["name"] == "get_booking_time_slots"
+        assert body["tools"][0]["required_parameters"] == ["calendar_id"]
+        assert len(body["tools"][0]["parameters"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_tools_list_endpoint_error(self):
+        """Test tools list endpoint error handling."""
+        import json
+        import main
+
+        class ErrorClientContext:
+            async def __aenter__(self):
+                raise RuntimeError("Connection failed")
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        with patch("main.Client", return_value=ErrorClientContext()):
+            mock_request = Mock()
+            response = await main.tools_list(mock_request)
+
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 500
+        body = json.loads(response.body.decode())
+        assert body["success"] is False
+        assert "Failed to list tools" in body["error"]
     
     def test_tools_are_registered(self):
         """Test that tools are registered with the MCP server"""
@@ -134,6 +206,7 @@ class TestMCPServerIntegration:
         # If we can import main without error, the if __name__ == "__main__" guard works
         assert hasattr(main, 'mcp')
         assert hasattr(main, 'health_check')
+        assert hasattr(main, 'tools_list')
 
 
 class TestServerConfiguration:
@@ -221,6 +294,32 @@ class TestHealthCheckDecorators:
         import inspect
         
         assert inspect.iscoroutinefunction(main.health_check)
+
+
+class TestToolsListHelpers:
+    """Test helper functions used by tools listing endpoint."""
+
+    def test_to_dict_with_dict(self):
+        """_to_dict should return dictionaries as-is."""
+        import main
+
+        data = {"name": "x"}
+        assert main._to_dict(data) == data
+
+    def test_to_dict_with_object_attrs(self):
+        """_to_dict should map common object attributes."""
+        import main
+
+        tool_obj = Mock()
+        tool_obj.name = "tool_a"
+        tool_obj.description = "desc"
+        tool_obj.inputSchema = {"type": "object"}
+        tool_obj.outputSchema = None
+
+        result = main._to_dict(tool_obj)
+        assert result["name"] == "tool_a"
+        assert result["description"] == "desc"
+        assert result["inputSchema"]["type"] == "object"
 
 
 if __name__ == "__main__":
